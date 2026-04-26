@@ -419,19 +419,18 @@
 
     // --- PI ADS LOGIC (FIXED AUTH & COOLDOWN) ---
     let lastAdTime = 0;
-    const AD_COOLDOWN_MS = 2 * 60 * 1000; // Reduced to 2 mins for easier testing
+    const AD_COOLDOWN_MS = 2 * 60 * 1000; // 2 Minute cooldown
     
     window.showPiAd = async () => {
         if (isUserPremium) return;
 
         if (Date.now() - lastAdTime < AD_COOLDOWN_MS) {
-            console.log("Ad in cooldown window.");
+            console.log("Ad in cooldown window. Skipping ad request.");
             return;
         }
         
         try {
             // Re-authenticate silently to ensure the bridge is active
-            // This prevents the 'Invalid argument' error!
             await Pi.authenticate(['payments'], (p) => {}); 
             
             console.log("Attempting to show Pi Ad...");
@@ -443,15 +442,13 @@
         }
     };
 
-    // --- LOGIN HANDLER (REPAIRED) ---
+    // --- LOGIN HANDLER ---
     window.handleLogin = async () => {
         const email = document.getElementById('login-email').value;
         const pass = document.getElementById('login-password').value;
         
         try {
-            // First, login to Firebase
             await signInWithEmailAndPassword(auth, email, pass);
-            // Second, ensure Pi Bridge is authenticated for Ads
             await Pi.authenticate(['payments'], (p) => { console.log("Pi Authenticated"); });
         } catch (e) {
             alert("Login Failed: " + e.message);
@@ -547,7 +544,7 @@
         if(document.querySelectorAll('.item-row').length > 1) { btn.closest('.item-row').remove(); window.updatePreview(); }
     };
 
-    // --- SAVE DRAFT ---
+    // --- SAVE DRAFT (AD MONETIZATION POINT 1) ---
     window.saveDraft = async function() {
         if (!currentUser) return alert("Please log in.");
         if (!validateForm()) return; 
@@ -563,7 +560,10 @@
             alert("Error saving draft: " + e.message);
         } finally {
             toggleButtonLoading('btn-save', 'Saving', false);
-            window.showPiAd(); // Fire Ad AFTER UI resolves
+            // Show ad after saving completes
+            if (typeof window.showPiAd === 'function') {
+                window.showPiAd(); 
+            }
         }
     };
 
@@ -586,7 +586,7 @@
         }
     };
 
-    // --- EMAIL PDF GENERATION LOGIC (RESTORED TO USER'S EXACT WORKING CODE) ---
+    // --- EMAIL PDF GENERATION LOGIC (NO ADS ALLOWED HERE) ---
     window.processPDF = async function() {
         if (!currentUser) return alert("Please log in.");
         if (!validateForm()) return;
@@ -628,16 +628,15 @@
             }
             if (!isEditingOld) incrementInvoice(invNo);
         } catch (e) {
-            alert("PDF Error: " + e.message);
+            console.error(e);
+            alert("Share Error: If the share menu didn't open, the browser blocked it. Try again.");
         } finally {
             toggleButtonLoading('btn-email', 'Generating', false);
-            // Run Ad AFTER share is completed or triggered
-            // Use setTimeout to prevent ad from stealing focus from the native share menu popup
-            setTimeout(() => window.showPiAd(), 1500); 
+            // Notice: There is intentionally NO Ad triggered here!
         }
     };
 
-    // --- PI PAYMENTS LOGIC (BULLETPROOF DATA WRAPPER) ---
+    // --- PI PAYMENTS LOGIC ---
     window.purchasePremiumRemoval = async () => {
         if (!currentUser) return alert("Please log in first.");
         alert("Initializing live Pi Payment...");
@@ -652,7 +651,6 @@
             }, {
                 onReadyForServerApproval: function(paymentId) {
                     console.log("Step 1: Raw Payment ID from Pi:", paymentId);
-                    // Force the ID to be a clean string
                     const safePaymentId = String(paymentId); 
                     
                     const approvePayment = httpsCallable(functions, 'approvePiPayment');
@@ -755,6 +753,7 @@
         ]);
     }
 
+    // --- LOAD RECEIPT (AD MONETIZATION POINT 2) ---
     window.retrieveInvoice = async () => {
         const num = document.getElementById('lookup-inv').value;
         if (!num) return alert("Please enter a receipt number.");
@@ -788,6 +787,11 @@
             alert("Receipt not found."); 
         }
         toggleButtonLoading('btn-load', 'Loading', false);
+        
+        // Show ad after receipt is loaded into the form
+        if (typeof window.showPiAd === 'function') {
+            window.showPiAd(); 
+        }
     };
 
     function incrementInvoice(curr) {
@@ -798,6 +802,7 @@
         }
     }
 
+    // --- NEW RECEIPT (AD MONETIZATION POINT 3) ---
     window.clearData = (bypass) => {
         if(bypass || confirm("Start new Receipt?")) {
             isEditingOld = false;
@@ -815,6 +820,11 @@
             
             window.fetchPiPrice(); 
             window.updatePreview();
+            
+            // Show ad when starting a clean slate (unless they are deleting a receipt)
+            if (!bypass && typeof window.showPiAd === 'function') {
+                window.showPiAd();
+            }
         }
     };
 
