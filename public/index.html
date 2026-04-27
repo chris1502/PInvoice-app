@@ -586,7 +586,7 @@
         }
     };
 
-    // --- EMAIL PDF GENERATION LOGIC (NO ADS ALLOWED HERE) ---
+    // --- EMAIL PDF GENERATION LOGIC ---
     window.processPDF = async function() {
         if (!currentUser) return alert("Please log in.");
         if (!validateForm()) return;
@@ -608,34 +608,53 @@
         };
         
         try {
-            alert("Generating PDF to attach... Please wait a moment.");
-            
-            // Generate the PDF file object
+            // 🚨 NO ALERTS HERE! Popups instantly break mobile share permissions.
             const blob = await html2pdf().set(opt).from(element).outputPdf('blob');
             const file = new File([blob], fileName, { type: 'application/pdf' });
             
-            // Use the Mobile Share API to pass the file to an email client
+            let shareSuccess = false;
+
+            // Attempt Native Mobile Share
             if (navigator.share) {
-                await navigator.share({ 
-                    files: [file], 
-                    title: `Invoice ${invNo}`,
-                    text: `Please find attached Invoice ${invNo}.`
-                });
-            } else {
-                alert("Direct email attachment isn't supported here. Opening the PDF directly so you can save and email it manually.");
-                const pdfDataUri = await html2pdf().set(opt).from(element).outputPdf('datauristring');
-                window.location.href = pdfDataUri;
+                try {
+                    await navigator.share({ 
+                        files: [file], 
+                        title: `Invoice ${invNo}`,
+                        text: `Please find attached Invoice ${invNo}.`
+                    });
+                    shareSuccess = true;
+                } catch (shareErr) {
+                    console.log("Share error:", shareErr);
+                    // If the user manually swiped the share menu away, it throws 'AbortError'.
+                    // We only want the fallback to trigger if the browser itself blocked it.
+                    if (shareErr.name === 'AbortError') {
+                        shareSuccess = true; 
+                    }
+                }
             }
+            
+            // FALLBACK: If share is completely blocked or unsupported, force a standard file download
+            if (!shareSuccess) {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                alert("Share menu blocked by device security. The PDF was downloaded directly to your phone.");
+            }
+            
             if (!isEditingOld) incrementInvoice(invNo);
         } catch (e) {
             console.error(e);
-            alert("Share Error: If the share menu didn't open, the browser blocked it. Try again.");
+            alert("Error generating PDF: " + e.message);
         } finally {
             toggleButtonLoading('btn-email', 'Generating', false);
-            // Notice: There is intentionally NO Ad triggered here!
         }
     };
-
     // --- PI PAYMENTS LOGIC ---
     window.purchasePremiumRemoval = async () => {
         if (!currentUser) return alert("Please log in first.");
