@@ -608,13 +608,13 @@
         };
         
         try {
-            // 🚨 NO ALERTS HERE! Popups instantly break mobile share permissions.
+            // Generate the PDF file object
             const blob = await html2pdf().set(opt).from(element).outputPdf('blob');
             const file = new File([blob], fileName, { type: 'application/pdf' });
             
             let shareSuccess = false;
 
-            // Attempt Native Mobile Share
+            // 1. Attempt Native Mobile Share First
             if (navigator.share) {
                 try {
                     await navigator.share({ 
@@ -625,26 +625,17 @@
                     shareSuccess = true;
                 } catch (shareErr) {
                     console.log("Share error:", shareErr);
-                    // If the user manually swiped the share menu away, it throws 'AbortError'.
-                    // We only want the fallback to trigger if the browser itself blocked it.
                     if (shareErr.name === 'AbortError') {
-                        shareSuccess = true; 
+                        shareSuccess = true; // User intentionally swiped the menu away
                     }
                 }
             }
             
-            // FALLBACK: If share is completely blocked or unsupported, force a standard file download
+            // 2. THE ORIGINAL WORKING FALLBACK (Data URI)
             if (!shareSuccess) {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                alert("Share menu blocked by device security. The PDF was downloaded directly to your phone.");
+                alert("Share menu blocked. Opening the PDF directly so you can save and email it manually.");
+                const pdfDataUri = await html2pdf().set(opt).from(element).outputPdf('datauristring');
+                window.location.href = pdfDataUri;
             }
             
             if (!isEditingOld) incrementInvoice(invNo);
